@@ -1,19 +1,23 @@
 <?php
 
 class ResParse {
-	private $data;
+	private $handle;
 	private $caret = 0;
-	private $length;
+	// private $length;
 
-	public function __construct($str) {
-		$this->data = $str;
-		$this->length = strlen($str);
+	public function __construct($handle) {
+		$this->handle = $handle;
+		// $this->length = strlen($str);
 	}
 
 	private function eat($count) {
-		$begin = $this->caret;
-		$this->caret += $count;
-		return substr($this->data, $begin, $count);
+		// $begin = $this->caret;
+		// $this->caret += $count;
+		// return substr($this->data, $begin, $count);
+		if (feof($this->handle)) {
+			return null;
+		}
+		return fread($this->handle, $count);
 	}
 
 	public function parse() {
@@ -34,17 +38,17 @@ class ResParse {
 	}
 
 	private function parseStatus() {
-		$msg = $this->data();
+		$msg = fgets($this->handle);
 		return $this->result("status",trim($msg));
 	}
 
 	private function parseError() {
-		$msg = $this->data();
+		$msg = fgets($this->handle);
 		return $this->result("error",trim($msg));
 	}
 
 	private function parseNum() {
-		$msg = $this->data();
+		$msg = fgets($this->handle);
 		$msg = trim($msg);
 		$this->assertNumber($msg);
 		return $this->result("number", $msg);
@@ -71,7 +75,7 @@ class ResParse {
 			$this->eat(1);
 			$ret []= $this->parseBat();
 		}
-		return $ret;
+		return $this->result("array", $ret);
 	}
 
 	private function result($type,$data) {
@@ -84,16 +88,21 @@ class ResParse {
 		}
 	}
 
+	// 会产生死循环
 	private function data() {
-		return substr($this->data,$this->caret);
+		$ret = '';
+		while(!feof($this->handle)) {
+			$ret .= fgets($this->handle, 128);
+		}
+		return trim($ret);
 	}
 
 	private function getLine() {
 		$ret = '';
 
-		for ($i = $this->caret; $i < $this->length; $i++) { 
+		for (;;) { 
 			$c = $this->eat(1);
-			if (ord($c)==10) {
+			if (is_null($c) || ord($c)==10) {
 				break;
 			}
 			$ret .= $c;
@@ -106,7 +115,11 @@ class ResParse {
 class myRedis {
 	private $socket;
 
-	public function toRedisData(array $args)
+	public function __construct($host = "127.0.0.1",$port = 6379) {
+		$this->socket = fsockopen($host, $port);
+	}
+
+	private function toRedisData(array $args)
 	{
 		$len = count($args);
 		$ret = "*$len\r\n";
@@ -118,20 +131,35 @@ class myRedis {
 		return $ret;
 	}
 
-	public function __call($method,$args) {
+	public function __call($method, $args) {
 		$method = strtoupper($method);
 		array_unshift($args, $method);
 		$data = $this->toRedisData($args);
-		echo $data;
+		fwrite($this->socket, $data);
+
+		$ret = $this->parseRedis();
+
+		return $this->redisData2PhpData($ret);
 	}
 
-	public function parseRedis($str) {
-		$parse = new ResParse($str);
+	private function parseRedis() {
+		$parse = new ResParse($this->socket);
 		return $parse->parse();
 	}
 
-	private function connect($host, $port) {
-		$this->socket = fsockopen($host, $port);
+	private function redisData2PhpData($data) {
+		switch($data["type"]) {
+			case "error":
+				throw new Exception($data["data"]);
+			case "array":
+				$ret = [];
+				foreach($data["data"] as $item) {
+					$ret []= $item["data"];
+				}
+				return $ret;
+			default:
+				return $data["data"];
+		}
 	}
 
 	public function close() {
@@ -145,8 +173,12 @@ class myRedis {
 	}
 }
 
+
 $redis = new myRedis;
-// echo $parse->toRedisData(["set","key","this is value of key"]);
-// $redis->set("key1","10");
-$data = $redis->parseRedis("*4\r\n$3\r\nfoo\r\n$3\r\nbar\r\n$5\r\nHello\r\n$5\r\nWorld\r\n");
-print_r($data);
+// $redis->lpush("list1", "fuck");
+// $redis->lpush("list1", "you");
+// $redis->lpush("list1", "one");
+// $redis->lpush("list1", "by");
+// $redis->lpush("list1", "one");
+
+print_r($redis->lrange("list1",0,-1));
