@@ -1,6 +1,6 @@
 <?php
 
-class ResParse {
+class Parser {
 	private $handle;
 	private $caret = 0;
 	// private $length;
@@ -112,7 +112,7 @@ class ResParse {
 	}
 }
 
-class myRedis {
+class sixRedis {
 	private $socket;
 
 	public function __construct($host = "127.0.0.1",$port = 6379) {
@@ -143,7 +143,7 @@ class myRedis {
 	}
 
 	private function parseRedis() {
-		$parse = new ResParse($this->socket);
+		$parse = new Parser($this->socket);
 		return $parse->parse();
 	}
 
@@ -174,7 +174,7 @@ class myRedis {
 }
 
 
-$redis = new myRedis;
+$redis = new sixRedis;
 // $redis->lpush("list1", "fuck");
 // $redis->lpush("list1", "you");
 // $redis->lpush("list1", "one");
